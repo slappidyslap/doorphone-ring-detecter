@@ -1,22 +1,28 @@
 package kg.musabaev;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
 
 public class Gui {
 
     private SystemTray tray;
+
     private Image image, disabledImage;
     private TrayIcon trayIcon;
 
-    private boolean isEnabled;
+    private PopupMenu trayPopupMenu;
+    private MenuItem exitMenuItem;
+
+    private boolean isDetectorEnabled;
 
     public Gui() {
         initSystemTray();
         initImages();
 
         setDefaultEnabledIcon();
+        isDetectorEnabled = true;
 
-        isEnabled = true;
+        setPopupMenu();
 
         addListeners();
     }
@@ -47,16 +53,26 @@ public class Gui {
         }
     }
 
+    private void setPopupMenu() {
+        trayPopupMenu = new PopupMenu();
+        exitMenuItem = new MenuItem("Exit", new MenuShortcut(KeyEvent.VK_Q, false));
+
+        trayPopupMenu.add(exitMenuItem);
+        trayIcon.setPopupMenu(trayPopupMenu);
+    }
+
     private void addListeners() {
         // add on click tray listener
         trayIcon.addActionListener(e -> {
-            if (isEnabled) {
+            if (isDetectorEnabled) {
                 trayIcon.setImage(disabledImage);
-                isEnabled = false;
+                isDetectorEnabled = false;
             } else {
                 trayIcon.setImage(image);
-                isEnabled = true;
+                isDetectorEnabled = true;
             }
         });
+
+        exitMenuItem.addActionListener(e -> System.exit(0));
     }
 }
