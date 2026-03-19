@@ -1,4 +1,4 @@
 rootProject.name = "doorphone-ring-detecter"
 
-include(":tray")
-include(":core")
+include(":doorphone-tray")
+include(":doorphone-core")
