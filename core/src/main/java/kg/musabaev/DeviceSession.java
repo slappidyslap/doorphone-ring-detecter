@@ -1,6 +1,7 @@
 package kg.musabaev;
 
 import kg.musabaev.command.Command;
+import kg.musabaev.command.CommandResponse;
 import kg.musabaev.event.DeviceDisconnectedEvent;
 import kg.musabaev.event.DoorphoneRingDetectedEvent;
 import kg.musabaev.listener.DeviceDisconnectedListener;
@@ -12,7 +13,13 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.lang.Integer.parseInt;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -28,23 +35,40 @@ import static java.util.Objects.requireNonNull;
  *   </li>
  * </ul>
  */
-public class DeviceConnection implements Runnable {
+public class DeviceSession implements Runnable {
 
     private final SocketChannel deviceChannel;
+    private final ExecutorService commandExecutor;
 
     private final List<DoorphoneRingDetectedListener> ringDetectedListeners;
     private final List<DeviceDisconnectedListener> deviceDisconnectedListeners;
+
+    private final AtomicInteger correlationIdCounter;
+    private final ConcurrentMap<Integer, CompletableFuture<CommandResponse>> pendingCommandResponses;
 
     /**
      * Создает новое соединение на базе открытого канала.
      *
      * @param deviceChannel открытый канал сокета IoT устройства
      */
-    public DeviceConnection(SocketChannel deviceChannel) {
+    public DeviceSession(SocketChannel deviceChannel, ExecutorService commandExecutor) {
         this.deviceChannel = deviceChannel;
+        this.commandExecutor = commandExecutor;
 
         this.ringDetectedListeners = new ArrayList<>();
         this.deviceDisconnectedListeners = new ArrayList<>();
+
+        this.correlationIdCounter = new AtomicInteger(0);
+        this.pendingCommandResponses = new ConcurrentHashMap<>();
+    }
+
+    public CompletableFuture<CommandResponse> sendCommandAsync(Command cmd) {
+        var future = new CompletableFuture<CommandResponse>();
+        pendingCommandResponses.put(correlationIdCounter.getAndIncrement(), future);
+
+        commandExecutor.submit(() -> sendCommand(cmd));
+
+        return future;
     }
 
     /**
@@ -52,12 +76,8 @@ public class DeviceConnection implements Runnable {
      *
      * @param cmd объект команды
      */
-    public void sendCommand(Command cmd) {
-        String rawPayload = cmd
-                .getClass()
-                .getSimpleName()
-                .replace("Command", "")
-                .toUpperCase();
+    private void sendCommand(Command cmd) {
+        String rawPayload = cmd.getPayload();
         sendCommand(rawPayload);
     }
 
@@ -102,7 +122,7 @@ public class DeviceConnection implements Runnable {
                     var message = new String(data, StandardCharsets.UTF_8).trim();
 
                     if (!message.isEmpty()) {
-                        processIncomingMessage(message);
+                        handleOutputMessage(message);
                     }
                 }
             }
@@ -114,10 +134,26 @@ public class DeviceConnection implements Runnable {
     }
 
     /**
-     * Разбирает входящее сообщение и уведомляет соответствующих слушателей.
+     * Разбирает входящее сообщение.
      */
-    private void processIncomingMessage(String message) {
-        if ("RING".equals(message)) fireDoorphoneRingDetectedListeners();
+    private void handleOutputMessage(String message) {
+        if (message.startsWith("E:")) {
+            String[] eventOutputParts = message.split(":");
+            var eventType = eventOutputParts[1];
+
+            if (eventType.equals("RING"))
+                fireDoorphoneRingDetectedListeners();
+        }
+        else if (message.startsWith("R:")) {
+            String[] commandResponseOutputParts = message.split(":");
+            int correlationId = parseInt(commandResponseOutputParts[1]);
+            CompletableFuture<CommandResponse> future =
+                    pendingCommandResponses.get(correlationId);
+            if (future != null)
+                future.complete(new CommandResponse(true, commandResponseOutputParts[2]));
+            else
+                throw new RuntimeException("Future with correlation id %s not found".formatted(correlationId));
+        }
     }
 
     /**

@@ -1,6 +1,6 @@
 package kg.musabaev.event;
 
-import kg.musabaev.DeviceConnection;
+import kg.musabaev.DeviceSession;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -10,6 +10,6 @@ import java.net.SocketAddress;
 @EqualsAndHashCode(callSuper = true)
 public non-sealed class DeviceConnectedEvent extends Event {
 
-    private final DeviceConnection connection;
+    private final DeviceSession session;
     private final SocketAddress remoteAddress;
 }

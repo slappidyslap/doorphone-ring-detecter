@@ -10,8 +10,9 @@ public class Main {
 //            thread.setName("device");
 //            return thread;
 //        }
-        var deviceConnPool = Executors.newSingleThreadExecutor();
-        var server = new DeviceServer(8080, deviceConnPool);
+        var deviceSessionPool = Executors.newSingleThreadExecutor();
+        var commandExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        var server = new DeviceServer(8080, deviceSessionPool, commandExecutor);
         server.start();
 
         new Gui(server);

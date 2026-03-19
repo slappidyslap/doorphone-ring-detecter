@@ -1,7 +1,16 @@
 package kg.musabaev.command;
 
+import lombok.Data;
+
 /**
  * Базовый класс для всех команд, отправляемых на IoT устройство.
  */
-public sealed class Command permits PingCommand {
+@Data
+public sealed class Command permits KeyValueCommand, PingCommand {
+
+    private final String key;
+
+    public String getPayload() {
+        return "C:" + key;
+    }
 }

@@ -21,7 +21,8 @@ import static java.util.Objects.requireNonNull;
 public class DeviceServer implements Runnable {
 
     private final ServerSocketChannel serverChannel;
-    private final ExecutorService connectionPool;
+    private final ExecutorService sessionPool;
+    private final ExecutorService commandExecutor;
     private Thread serverThread;
     private volatile boolean isRunning;
 
@@ -34,10 +35,11 @@ public class DeviceServer implements Runnable {
      * @param port порт для приема входящих соединений
      * @throws IOException если не удалось привязать сокет к порту
      */
-    public DeviceServer(int port, ExecutorService connectionPool) throws IOException {
+    public DeviceServer(int port, ExecutorService sessionPool, ExecutorService commandExecutor) throws IOException {
         this.serverChannel = ServerSocketChannel.open();
         this.serverChannel.bind(new InetSocketAddress(port));
-        this.connectionPool = connectionPool;
+        this.sessionPool = sessionPool;
+        this.commandExecutor = commandExecutor;
         this.isRunning = false;
 
         this.serverStartedListeners = new ArrayList<>();
@@ -70,16 +72,16 @@ public class DeviceServer implements Runnable {
      */
     private void acceptLoop() {
         while (isRunning) {
-            DeviceConnection deviceConn;
+            DeviceSession deviceSession;
             try {
                 // Блокируемся, пока IoT устройство не подключится
                 SocketChannel deviceClient = serverChannel.accept();
-                deviceConn = new DeviceConnection(deviceClient);
+                deviceSession = new DeviceSession(deviceClient, commandExecutor);
 
                 fireDeviceConnectedListeners(
-                        new DeviceConnectedEvent(deviceConn, deviceClient.getRemoteAddress()));
+                        new DeviceConnectedEvent(deviceSession, deviceClient.getRemoteAddress()));
 
-                connectionPool.submit(deviceConn);
+                sessionPool.submit(deviceSession);
             } catch (IOException e) {
                 // TODO
                 throw new RuntimeException(e);
@@ -124,6 +126,6 @@ public class DeviceServer implements Runnable {
         isRunning = false;
         serverChannel.close();
         serverThread.interrupt(); // чек
-        connectionPool.shutdown();
+        sessionPool.shutdown();
     }
 }

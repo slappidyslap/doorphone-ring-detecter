@@ -93,9 +93,9 @@ public class Gui implements
     private void addListeners() {
         server.addServerStartedListener(this);
         server.addDeviceConnectedListener(event -> {
-            DeviceConnection conn = event.getConnection();
-            conn.addDoorphoneRingDetectedListener(this);
-            conn.addDeviceDisconnectedListener(this);
+            DeviceSession session = event.getSession();
+            session.addDoorphoneRingDetectedListener(this);
+            session.addDeviceDisconnectedListener(this);
         });
 
         // Отправка Ping через ExecutorService
