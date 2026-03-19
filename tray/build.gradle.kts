@@ -10,6 +10,10 @@ repositories {
     mavenCentral()
 }
 
+dependencies {
+    implementation(project(":core"))
+}
+
 application {
     mainClass = "kg.musabaev.Main"
 }
