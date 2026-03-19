@@ -1,105 +1,96 @@
 package kg.musabaev;
 
-import kg.musabaev.event.DoorphoneRingDetectedEvent;
-import kg.musabaev.listener.DoorphoneRingDetectedListener;
+import kg.musabaev.event.DeviceConnectedEvent;
+import kg.musabaev.listener.DeviceConnectedListener;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousChannelGroup;
-import java.nio.channels.AsynchronousServerSocketChannel;
-import java.nio.channels.AsynchronousSocketChannel;
-import java.nio.channels.CompletionHandler;
+import java.net.SocketAddress;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Сервер, что слушает входящие события от IoT устройства и уведомляет слушателей.
+ * Сервер для приёма подключений от IoT устройства.
  */
 public class DeviceEventServer {
 
-    private final AsynchronousServerSocketChannel channel;
+    private final ServerSocketChannel serverChannel;
+    private volatile boolean isRunning;
 
-    // ========== Listeners ==========
-    private final List<DoorphoneRingDetectedListener> doorphoneRingDetectedListeners;
+    private final List<DeviceConnectedListener> deviceConnectedListeners;
 
     /**
-     * Создаёт сервер и начинает прослушивание входящих подключений от IoT устройства.
+     * Создает сервер на указанном порту.
      *
-     * @param serverPort порт, на котором сервер принимает подключения
-     * @param executor   пул потоков для обработки асинхронных I/O операций
-     * @throws RuntimeException TODO
+     * @param port порт для приема входящих соединений
+     * @throws IOException если не удалось привязать сокет к порту
      */
-    public DeviceEventServer(int serverPort, ExecutorService executor) {
-        try {
-            var group = AsynchronousChannelGroup.withThreadPool(executor);
-            channel = AsynchronousServerSocketChannel.open(group);
-            channel.bind(new InetSocketAddress(serverPort));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    public DeviceEventServer(int port) throws IOException {
+        this.serverChannel = ServerSocketChannel.open();
+        this.serverChannel.bind(new InetSocketAddress(port));
+
+        this.deviceConnectedListeners = new ArrayList<>();
+
+        this.isRunning = false;
+    }
+
+    /**
+     * Запускает сервер в фоновом потоке.
+     */
+    public void start() {
+        if (isRunning) throw new RuntimeException("Server already is running"); // todo
+        isRunning = true;
+
+        var serverThread = new Thread(this::acceptLoop, "doorphone-ring-detector-server");
+        serverThread.setDaemon(true);
+        serverThread.start();
+    }
+
+    /**
+     * Основной цикл приема соединений.
+     */
+    private void acceptLoop() {
+        while (isRunning) {
+            DeviceConnection deviceConn;
+            try {
+                SocketChannel deviceClient = serverChannel.accept();
+                SocketAddress remoteAddress = deviceClient.getRemoteAddress();
+                deviceConn = new DeviceConnection(deviceClient);
+
+                fireDeviceConnectedListeners(new DeviceConnectedEvent(deviceConn, remoteAddress));
+            } catch (IOException e) {
+                // TODO
+                throw new RuntimeException(e);
+            }
+            deviceConn.start();
         }
-        doorphoneRingDetectedListeners = new ArrayList<>();
-
-        acceptDevice();
-    }
-
-    private void acceptDevice() {
-        channel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Void>() {
-            @Override
-            public void completed(AsynchronousSocketChannel device, Void attachment) {
-                handleDeviceEvent(device);
-            }
-
-            @Override
-            public void failed(Throwable exc, Void attachment) {
-                throw new RuntimeException(exc); // TODO
-            }
-        });
-    }
-
-    private void handleDeviceEvent(AsynchronousSocketChannel client) {
-        var buf = ByteBuffer.allocate(64);
-        client.read(buf, null, new CompletionHandler<Integer, Void>() {
-            @Override
-            public void completed(Integer bytesRead, Void attachment) {
-                buf.flip();
-                String event = new String(buf.array(), 0, bytesRead);
-                if (event.equals("RING"))
-                    fireDoorphoneRingDetectedListeners();
-            }
-
-            @Override
-            public void failed(Throwable exc, Void attachment) {
-                throw new RuntimeException(exc); // TODO
-            }
-        });
     }
 
     /**
-     * Добавить слушателя события звонка домофона.
-     * <p>
-     * Слушатель будет вызван при получении события {@code RING} от устройства.
+     * Добавляет слушателя подключения соединения.
+     */
+    public void addDeviceConnectedListener(DeviceConnectedListener listener) {
+        deviceConnectedListeners.add(requireNonNull(listener));
+    }
+
+    /**
+     * Уведомить всех слушателей подключения соединения.
+     */
+    private void fireDeviceConnectedListeners(DeviceConnectedEvent event) {
+        deviceConnectedListeners.forEach(l -> l.onConnected(event));
+    }
+
+    /**
+     * Останавливает сервер и закрывает слушающий сокет.
      *
-     * @param listener слушатель, не может быть {@code null}
-     * @see DoorphoneRingDetectedListener
-     * @see #fireDoorphoneRingDetectedListeners()
+     * @throws IOException если произошла ошибка при закрытии канала
      */
-    public void addDoorphoneRingDetectedListener(DoorphoneRingDetectedListener listener) {
-        doorphoneRingDetectedListeners.add(requireNonNull(listener));
-    }
-
-    /**
-     * Уведомить всех слушателей звонка домофона.
-     */
-    private void fireDoorphoneRingDetectedListeners() {
-        doorphoneRingDetectedListeners.forEach(
-                l -> l.onDetected(new DoorphoneRingDetectedEvent()));
-    }
-
-    public void close() throws IOException {
-        channel.close();
+    public void stop() throws IOException {
+        isRunning = false;
+        serverChannel.close();
     }
 }
