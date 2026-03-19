@@ -3,21 +3,31 @@ package kg.musabaev;
 import kg.musabaev.event.DeviceConnectedEvent;
 import kg.musabaev.event.DeviceDisconnectedEvent;
 import kg.musabaev.event.DoorphoneRingDetectedEvent;
+import kg.musabaev.event.ServerStartedEvent;
 import kg.musabaev.listener.DeviceConnectedListener;
 import kg.musabaev.listener.DeviceDisconnectedListener;
 import kg.musabaev.listener.DoorphoneRingDetectedListener;
+import kg.musabaev.listener.ServerStartedListener;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
 
+import static java.awt.TrayIcon.MessageType.INFO;
+import static java.awt.TrayIcon.MessageType.WARNING;
+
 public class Gui implements
+        ServerStartedListener,
+        DeviceConnectedListener,
         DoorphoneRingDetectedListener,
-        DeviceDisconnectedListener,
-        DeviceConnectedListener {
+        DeviceDisconnectedListener {
+
+    private final DeviceEventServer server;
 
     private SystemTray tray;
 
-    private Image image, disabledImage;
+    private Image disabledIconImage;
+    private Image pendingIconImage;
+    private Image runningIconImage;
     private TrayIcon trayIcon;
 
     private PopupMenu trayPopupMenu;
@@ -27,16 +37,12 @@ public class Gui implements
     private boolean isDetectorEnabled;
 
     public Gui(DeviceEventServer deviceEventServer) {
-        deviceEventServer.addDeviceConnectedListener(event -> {
-            DeviceConnection conn = event.getConnection();
-            conn.addDoorphoneRingDetectedListener(this);
-            conn.addDeviceDisconnectedListener(this);
-        });
+        this.server = deviceEventServer;
 
         initSystemTray();
         initImages();
 
-        setDefaultEnabledIcon();
+        setDefaultDisabledIcon();
         isDetectorEnabled = true;
 
         setPopupMenu();
@@ -52,17 +58,19 @@ public class Gui implements
 
     private void initImages() {
         var toolkit = Toolkit.getDefaultToolkit();
-        image = toolkit.createImage(
-                ClassLoader.getSystemResource("tray-icon-disabled.png") // todo
+        disabledIconImage = toolkit.createImage(
+                ClassLoader.getSystemResource("tray-icon-disabled.png")
         );
-
-        disabledImage = toolkit.createImage(
-                ClassLoader.getSystemResource("tray-icon-disabled.png") // todo
+        pendingIconImage = toolkit.createImage(
+                ClassLoader.getSystemResource("tray-icon-pending.png")
+        );
+        runningIconImage = toolkit.createImage(
+                ClassLoader.getSystemResource("tray-icon-running.png")
         );
     }
 
-    private void setDefaultEnabledIcon() {
-        trayIcon = new TrayIcon(image);
+    private void setDefaultDisabledIcon() {
+        trayIcon = new TrayIcon(disabledIconImage);
         try {
             tray.add(trayIcon);
         } catch (AWTException e) {
@@ -83,22 +91,29 @@ public class Gui implements
     }
 
     private void addListeners() {
-        // Переключение иконки и статуса
-        trayIcon.addActionListener(e -> {
-            if (isDetectorEnabled) {
-                trayIcon.setImage(disabledImage);
-                isDetectorEnabled = false;
-            } else {
-                trayIcon.setImage(image);
-                isDetectorEnabled = true;
-            }
+        server.addServerStartedListener(this);
+        server.addDeviceConnectedListener(event -> {
+            DeviceConnection conn = event.getConnection();
+            conn.addDoorphoneRingDetectedListener(this);
+            conn.addDeviceDisconnectedListener(this);
         });
+
+        // Переключение иконки и статуса
+//        trayIcon.addActionListener(e -> {
+//            if (isDetectorEnabled) {
+//                trayIcon.setImage(disabledIconImage);
+//                isDetectorEnabled = false;
+//            } else {
+//                trayIcon.setImage(image);
+//                isDetectorEnabled = true;
+//            }
+//        });
 
         // Отправка Ping через ExecutorService
 //        pingMenuItem.addActionListener(e -> {
 //            commandExecutor.execute(() -> {
 //                try {
-////                    deviceEventServer.sendCommand(new PingCommand());
+////                    server.sendCommand(new PingCommand());
 //                    trayIcon.displayMessage("Ping", "Команда отправлена!", TrayIcon.MessageType.INFO);
 //                } catch (IllegalStateException | IOException ex) {
 //                    trayIcon.displayMessage("Ошибка", ex.getMessage(), TrayIcon.MessageType.ERROR);
@@ -121,17 +136,27 @@ public class Gui implements
     }
 
     @Override
-    public void onConnected(DeviceConnectedEvent event) {
+    public void onStarted(ServerStartedEvent event) {
+        trayIcon.setImage(pendingIconImage);
+    }
 
+    @Override
+    public void onConnected(DeviceConnectedEvent event) {
+        trayIcon.displayMessage(
+                "INFO",
+                "ESP32-S3 подключился. Его локальный IP адрес: %s".formatted(event.getRemoteAddress()),
+                INFO);
+        trayIcon.setImage(runningIconImage);
     }
 
     @Override
     public void onDetected(DoorphoneRingDetectedEvent event) {
-
+        trayIcon.displayMessage("WARNING", "Дядя тебе звонят!", WARNING);
     }
 
     @Override
     public void onDisconnected(DeviceDisconnectedEvent event) {
-
+        trayIcon.displayMessage("WARNING", "ESP32-S3 дисконнектился", WARNING);
+        trayIcon.setImage(pendingIconImage);
     }
 }
