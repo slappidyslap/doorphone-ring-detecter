@@ -1,14 +1,19 @@
 package kg.musabaev;
 
+import kg.musabaev.event.DeviceConnectedEvent;
+import kg.musabaev.event.DeviceDisconnectedEvent;
+import kg.musabaev.event.DoorphoneRingDetectedEvent;
+import kg.musabaev.listener.DeviceConnectedListener;
+import kg.musabaev.listener.DeviceDisconnectedListener;
+import kg.musabaev.listener.DoorphoneRingDetectedListener;
+
 import java.awt.*;
 import java.awt.event.KeyEvent;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-public class Gui {
-
-    private final DeviceEventServer deviceEventServer;
-    private final ExecutorService commandExecutor;
+public class Gui implements
+        DoorphoneRingDetectedListener,
+        DeviceDisconnectedListener,
+        DeviceConnectedListener {
 
     private SystemTray tray;
 
@@ -22,12 +27,10 @@ public class Gui {
     private boolean isDetectorEnabled;
 
     public Gui(DeviceEventServer deviceEventServer) {
-        this.deviceEventServer = deviceEventServer;
-        this.commandExecutor = Executors.newSingleThreadExecutor();
-
         deviceEventServer.addDeviceConnectedListener(event -> {
             DeviceConnection conn = event.getConnection();
-//            conn.addDoorphoneRingDetectedListener(this);
+            conn.addDoorphoneRingDetectedListener(this);
+            conn.addDeviceDisconnectedListener(this);
         });
 
         initSystemTray();
@@ -39,8 +42,6 @@ public class Gui {
         setPopupMenu();
 
         addListeners();
-
-        trayIcon.displayMessage("Doorphone Detector", "Сервер запущен и готов к работе!", TrayIcon.MessageType.INFO);
     }
 
     private void initSystemTray() {
@@ -52,11 +53,11 @@ public class Gui {
     private void initImages() {
         var toolkit = Toolkit.getDefaultToolkit();
         image = toolkit.createImage(
-                ClassLoader.getSystemResource("tray-icon.png")
+                ClassLoader.getSystemResource("tray-icon-disabled.png") // todo
         );
 
         disabledImage = toolkit.createImage(
-                ClassLoader.getSystemResource("tray-icon-disabled.png")
+                ClassLoader.getSystemResource("tray-icon-disabled.png") // todo
         );
     }
 
@@ -117,5 +118,20 @@ public class Gui {
 //                trayIcon.displayMessage("Doorphone", "Звонок!", TrayIcon.MessageType.INFO);
 //            }
 //        });
+    }
+
+    @Override
+    public void onConnected(DeviceConnectedEvent event) {
+
+    }
+
+    @Override
+    public void onDetected(DoorphoneRingDetectedEvent event) {
+
+    }
+
+    @Override
+    public void onDisconnected(DeviceDisconnectedEvent event) {
+
     }
 }
