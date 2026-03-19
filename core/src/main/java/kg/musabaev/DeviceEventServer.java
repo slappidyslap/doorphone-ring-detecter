@@ -1,7 +1,9 @@
 package kg.musabaev;
 
 import kg.musabaev.event.DeviceConnectedEvent;
+import kg.musabaev.event.ServerStartedEvent;
 import kg.musabaev.listener.DeviceConnectedListener;
+import kg.musabaev.listener.ServerStartedListener;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -21,6 +23,7 @@ public class DeviceEventServer {
     private final ServerSocketChannel serverChannel;
     private volatile boolean isRunning;
 
+    private final List<ServerStartedListener> serverStartedListeners;
     private final List<DeviceConnectedListener> deviceConnectedListeners;
 
     /**
@@ -33,6 +36,7 @@ public class DeviceEventServer {
         this.serverChannel = ServerSocketChannel.open();
         this.serverChannel.bind(new InetSocketAddress(port));
 
+        this.serverStartedListeners = new ArrayList<>();
         this.deviceConnectedListeners = new ArrayList<>();
 
         this.isRunning = false;
@@ -48,6 +52,8 @@ public class DeviceEventServer {
         var serverThread = new Thread(this::acceptLoop, "doorphone-ring-detector-server");
         serverThread.setDaemon(true);
         serverThread.start();
+
+        fireServerStartedListeners(new ServerStartedEvent());
     }
 
     /**
@@ -68,6 +74,20 @@ public class DeviceEventServer {
             }
             deviceConn.start();
         }
+    }
+
+    /**
+     * Добавляет слушателя старт сервера.
+     */
+    public void addServerStartedListener(ServerStartedListener listener) {
+        serverStartedListeners.add(requireNonNull(listener));
+    }
+
+    /**
+     * Уведомить всех слушателей старт сервера.
+     */
+    private void fireServerStartedListeners(ServerStartedEvent event) {
+        serverStartedListeners.forEach(l -> l.onStarted(event));
     }
 
     /**
