@@ -5,7 +5,6 @@ import kg.musabaev.listener.DoorphoneRingDetectedListener;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousChannelGroup;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
@@ -22,6 +21,8 @@ import static java.util.Objects.requireNonNull;
 public class DeviceEventServer {
 
     private final AsynchronousServerSocketChannel channel;
+
+    private DeviceConnection deviceConnection;
 
     // ========== Listeners ==========
     private final List<DoorphoneRingDetectedListener> doorphoneRingDetectedListeners;
@@ -50,25 +51,12 @@ public class DeviceEventServer {
         channel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Void>() {
             @Override
             public void completed(AsynchronousSocketChannel device, Void attachment) {
-                handleDeviceEvent(device);
-            }
-
-            @Override
-            public void failed(Throwable exc, Void attachment) {
-                throw new RuntimeException(exc); // TODO
-            }
-        });
-    }
-
-    private void handleDeviceEvent(AsynchronousSocketChannel client) {
-        var buf = ByteBuffer.allocate(64);
-        client.read(buf, null, new CompletionHandler<Integer, Void>() {
-            @Override
-            public void completed(Integer bytesRead, Void attachment) {
-                buf.flip();
-                String event = new String(buf.array(), 0, bytesRead);
-                if (event.equals("RING"))
-                    fireDoorphoneRingDetectedListeners();
+                deviceConnection = new DeviceConnection(device);
+                deviceConnection.startListening(event -> {
+                    if ("RING".equals(event)) {
+                        fireDoorphoneRingDetectedListeners();
+                    }
+                });
             }
 
             @Override
@@ -99,7 +87,17 @@ public class DeviceEventServer {
                 l -> l.onDetected(new DoorphoneRingDetectedEvent()));
     }
 
+    /**
+     * Проверяет, подключено ли устройство.
+     */
+    public boolean isDeviceConnected() {
+        return deviceConnection != null && deviceConnection.isOpen();
+    }
+
     public void close() throws IOException {
+        if (deviceConnection != null) {
+            deviceConnection.close();
+        }
         channel.close();
     }
 }
