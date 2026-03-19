@@ -126,7 +126,7 @@ public class DeviceConnection implements Runnable {
     private void handleDisconnect() {
         try {
             fireDeviceDisconnectedListeners(
-                    new DeviceDisconnectedEvent(deviceChannel.getRemoteAddress()));
+                    new DeviceDisconnectedEvent(this, deviceChannel.getRemoteAddress()));
             close();
         } catch (IOException ignored) {
             //todo

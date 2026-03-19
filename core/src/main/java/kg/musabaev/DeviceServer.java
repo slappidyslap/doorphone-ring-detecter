@@ -18,7 +18,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Сервер для приёма подключений от IoT устройства.
  */
-public class DeviceEventServer implements Runnable {
+public class DeviceServer implements Runnable {
 
     private final ServerSocketChannel serverChannel;
     private final ExecutorService connectionPool;
@@ -34,7 +34,7 @@ public class DeviceEventServer implements Runnable {
      * @param port порт для приема входящих соединений
      * @throws IOException если не удалось привязать сокет к порту
      */
-    public DeviceEventServer(int port, ExecutorService connectionPool) throws IOException {
+    public DeviceServer(int port, ExecutorService connectionPool) throws IOException {
         this.serverChannel = ServerSocketChannel.open();
         this.serverChannel.bind(new InetSocketAddress(port));
         this.connectionPool = connectionPool;
@@ -72,15 +72,18 @@ public class DeviceEventServer implements Runnable {
         while (isRunning) {
             DeviceConnection deviceConn;
             try {
+                // Блокируемся, пока IoT устройство не подключится
                 SocketChannel deviceClient = serverChannel.accept();
                 deviceConn = new DeviceConnection(deviceClient);
 
-                fireDeviceConnectedListeners(new DeviceConnectedEvent(deviceConn, deviceClient.getRemoteAddress()));
+                fireDeviceConnectedListeners(
+                        new DeviceConnectedEvent(deviceConn, deviceClient.getRemoteAddress()));
+
+                connectionPool.submit(deviceConn);
             } catch (IOException e) {
                 // TODO
                 throw new RuntimeException(e);
             }
-            connectionPool.submit(deviceConn);
         }
     }
 

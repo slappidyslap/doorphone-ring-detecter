@@ -21,7 +21,7 @@ public class Gui implements
         DoorphoneRingDetectedListener,
         DeviceDisconnectedListener {
 
-    private final DeviceEventServer server;
+    private final DeviceServer server;
 
     private SystemTray tray;
 
@@ -36,8 +36,8 @@ public class Gui implements
 
     private boolean isDetectorEnabled;
 
-    public Gui(DeviceEventServer deviceEventServer) {
-        this.server = deviceEventServer;
+    public Gui(DeviceServer deviceServer) {
+        this.server = deviceServer;
 
         initSystemTray();
         initImages();
