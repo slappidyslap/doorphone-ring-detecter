@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
  *   </li>
  * </ul>
  */
-public class DeviceConnection {
+public class DeviceConnection implements Runnable {
 
     private final SocketChannel deviceChannel;
 
@@ -45,34 +45,6 @@ public class DeviceConnection {
 
         this.ringDetectedListeners = new ArrayList<>();
         this.deviceDisconnectedListeners = new ArrayList<>();
-    }
-
-    /**
-     * Добавляет слушателя события звонка домофона.
-     */
-    public void addDoorphoneRingDetectedListener(DoorphoneRingDetectedListener listener) {
-        ringDetectedListeners.add(requireNonNull(listener));
-    }
-
-    /**
-     * Уведомить всех слушателей звонка домофона.
-     */
-    private void fireDoorphoneRingDetectedListeners() {
-        ringDetectedListeners.forEach(l -> l.onDetected(new DoorphoneRingDetectedEvent()));
-    }
-
-    /**
-     * Добавляет слушателя разрыва соединения.
-     */
-    public void addDeviceDisconnectedListener(DeviceDisconnectedListener listener) {
-        deviceDisconnectedListeners.add(requireNonNull(listener));
-    }
-
-    /**
-     * Уведомить всех слушателей разрыва соединения.
-     */
-    private void fireDeviceDisconnectedListeners(DeviceDisconnectedEvent event) {
-        deviceDisconnectedListeners.forEach(l -> l.onDisconnected(event));
     }
 
     /**
@@ -105,17 +77,9 @@ public class DeviceConnection {
         }
     }
 
-    /**
-     * Запускает цикл чтения событий в отдельном daemon-потоке.
-     * Метод возвращает управление немедленно.
-     */
-    public void start() {
-        if (isOpen()) throw new RuntimeException("Connection is already open"); //todo
-
-        var readerThread = new Thread(this::readLoop,
-                "doorphone-ring-detector-connection-" + deviceChannel.hashCode());
-        readerThread.setDaemon(true);
-        readerThread.start();
+    @Override
+    public void run() {
+        readLoop();
     }
 
     /**
@@ -136,7 +100,7 @@ public class DeviceConnection {
                     var data = new byte[buffer.remaining()];
                     buffer.get(data);
                     var message = new String(data, StandardCharsets.UTF_8).trim();
-                    
+
                     if (!message.isEmpty()) {
                         processIncomingMessage(message);
                     }
@@ -167,7 +131,34 @@ public class DeviceConnection {
         } catch (IOException ignored) {
             //todo
         }
+    }
 
+    /**
+     * Добавляет слушателя события звонка домофона.
+     */
+    public void addDoorphoneRingDetectedListener(DoorphoneRingDetectedListener listener) {
+        ringDetectedListeners.add(requireNonNull(listener));
+    }
+
+    /**
+     * Уведомить всех слушателей звонка домофона.
+     */
+    private void fireDoorphoneRingDetectedListeners() {
+        ringDetectedListeners.forEach(l -> l.onDetected(new DoorphoneRingDetectedEvent()));
+    }
+
+    /**
+     * Добавляет слушателя разрыва соединения.
+     */
+    public void addDeviceDisconnectedListener(DeviceDisconnectedListener listener) {
+        deviceDisconnectedListeners.add(requireNonNull(listener));
+    }
+
+    /**
+     * Уведомить всех слушателей разрыва соединения.
+     */
+    private void fireDeviceDisconnectedListeners(DeviceDisconnectedEvent event) {
+        deviceDisconnectedListeners.forEach(l -> l.onDisconnected(event));
     }
 
     /**

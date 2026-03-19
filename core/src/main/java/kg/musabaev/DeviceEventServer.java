@@ -7,20 +7,22 @@ import kg.musabaev.listener.ServerStartedListener;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * Сервер для приёма подключений от IoT устройства.
  */
-public class DeviceEventServer {
+public class DeviceEventServer implements Runnable {
 
     private final ServerSocketChannel serverChannel;
+    private final ExecutorService connectionPool;
+    private Thread serverThread;
     private volatile boolean isRunning;
 
     private final List<ServerStartedListener> serverStartedListeners;
@@ -32,14 +34,14 @@ public class DeviceEventServer {
      * @param port порт для приема входящих соединений
      * @throws IOException если не удалось привязать сокет к порту
      */
-    public DeviceEventServer(int port) throws IOException {
+    public DeviceEventServer(int port, ExecutorService connectionPool) throws IOException {
         this.serverChannel = ServerSocketChannel.open();
         this.serverChannel.bind(new InetSocketAddress(port));
+        this.connectionPool = connectionPool;
+        this.isRunning = false;
 
         this.serverStartedListeners = new ArrayList<>();
         this.deviceConnectedListeners = new ArrayList<>();
-
-        this.isRunning = false;
     }
 
     /**
@@ -49,11 +51,18 @@ public class DeviceEventServer {
         if (isRunning) throw new RuntimeException("Server already is running"); // todo
         isRunning = true;
 
-        var serverThread = new Thread(this::acceptLoop, "doorphone-ring-detector-server");
-        serverThread.setDaemon(true);
+        serverThread = Thread
+                .ofVirtual()
+                .name("doorphone-ring-detector-server")
+                .factory()
+                .newThread(this);
         serverThread.start();
+    }
 
+    @Override
+    public void run() {
         fireServerStartedListeners(new ServerStartedEvent());
+        acceptLoop();
     }
 
     /**
@@ -64,15 +73,14 @@ public class DeviceEventServer {
             DeviceConnection deviceConn;
             try {
                 SocketChannel deviceClient = serverChannel.accept();
-                SocketAddress remoteAddress = deviceClient.getRemoteAddress();
                 deviceConn = new DeviceConnection(deviceClient);
 
-                fireDeviceConnectedListeners(new DeviceConnectedEvent(deviceConn, remoteAddress));
+                fireDeviceConnectedListeners(new DeviceConnectedEvent(deviceConn, deviceClient.getRemoteAddress()));
             } catch (IOException e) {
                 // TODO
                 throw new RuntimeException(e);
             }
-            deviceConn.start();
+            connectionPool.submit(deviceConn);
         }
     }
 
@@ -112,5 +120,7 @@ public class DeviceEventServer {
     public void stop() throws IOException {
         isRunning = false;
         serverChannel.close();
+        serverThread.interrupt(); // чек
+        connectionPool.shutdown();
     }
 }

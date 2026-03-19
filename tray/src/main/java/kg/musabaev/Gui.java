@@ -98,17 +98,6 @@ public class Gui implements
             conn.addDeviceDisconnectedListener(this);
         });
 
-        // Переключение иконки и статуса
-//        trayIcon.addActionListener(e -> {
-//            if (isDetectorEnabled) {
-//                trayIcon.setImage(disabledIconImage);
-//                isDetectorEnabled = false;
-//            } else {
-//                trayIcon.setImage(image);
-//                isDetectorEnabled = true;
-//            }
-//        });
-
         // Отправка Ping через ExecutorService
 //        pingMenuItem.addActionListener(e -> {
 //            commandExecutor.execute(() -> {
