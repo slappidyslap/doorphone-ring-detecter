@@ -17,6 +17,11 @@ java {
 
 dependencies {
     implementation(project(":doorphone-core"))
+
+    implementation("ch.qos.logback:logback-classic:1.5.32")
+
+    compileOnly("org.projectlombok:lombok:1.18.42")
+    annotationProcessor("org.projectlombok:lombok:1.18.42")
 }
 
 application {

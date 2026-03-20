@@ -15,6 +15,8 @@ java {
 }
 
 dependencies {
+    implementation("org.slf4j:slf4j-api:2.0.17")
+
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
 }

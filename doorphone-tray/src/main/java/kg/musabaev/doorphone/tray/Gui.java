@@ -1,5 +1,6 @@
 package kg.musabaev.doorphone.tray;
 
+import ch.qos.logback.classic.LoggerContext;
 import kg.musabaev.doorphone.core.DeviceServer;
 import kg.musabaev.doorphone.core.DeviceSession;
 import kg.musabaev.doorphone.core.command.PingCommand;
@@ -11,14 +12,18 @@ import kg.musabaev.doorphone.core.listener.DeviceConnectedListener;
 import kg.musabaev.doorphone.core.listener.DeviceDisconnectedListener;
 import kg.musabaev.doorphone.core.listener.DoorphoneRingDetectedListener;
 import kg.musabaev.doorphone.core.listener.ServerStartedListener;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
+import java.nio.file.Path;
 
 import static java.awt.TrayIcon.MessageType.*;
 
+@Slf4j
 public class Gui implements
         ServerStartedListener,
         DeviceConnectedListener,
@@ -37,6 +42,7 @@ public class Gui implements
 
     private PopupMenu trayPopupMenu;
     private MenuItem pingMenuItem;
+    private MenuItem openLogsMenuItem;
     private MenuItem exitMenuItem;
 
     public Gui(DeviceServer deviceServer) {
@@ -82,11 +88,13 @@ public class Gui implements
 
     private void initTrayPopupMenu() {
         trayPopupMenu = new PopupMenu();
-        pingMenuItem = new MenuItem("Ping Device");
+        pingMenuItem = new MenuItem("Ping Device", new MenuShortcut(KeyEvent.VK_P));
+        openLogsMenuItem = new MenuItem("Open logs", new MenuShortcut(KeyEvent.VK_L));
         exitMenuItem = new MenuItem("Exit", new MenuShortcut(KeyEvent.VK_Q, false));
 
         trayPopupMenu.add(pingMenuItem);
         trayPopupMenu.addSeparator();
+        trayPopupMenu.add(openLogsMenuItem);
         trayPopupMenu.add(exitMenuItem);
 
         trayIcon.setPopupMenu(trayPopupMenu);
@@ -114,6 +122,22 @@ public class Gui implements
                     }
                 })
         );
+
+        openLogsMenuItem.addActionListener(e -> {
+            var context = (LoggerContext) LoggerFactory.getILoggerFactory();
+            String curTimestamp = context.getProperty("currentTimestamp");
+            try {
+                Path logFilePath = userHomePath()
+                        .resolve(".doorphone-ring-detector")
+                        .resolve("logs")
+                        .resolve("log-%s.log".formatted(curTimestamp));
+                Desktop.getDesktop().open(logFilePath.toFile());
+                log.info("Current log file opened");
+            } catch (IOException ex) {
+                log.error("Ошибка при попытке открыть текущего лог файла", ex);
+                trayDisplayMessage(ERROR, "Unable to open logs.");
+            }
+        });
 
         exitMenuItem.addActionListener(e -> {
             try {
@@ -148,5 +172,9 @@ public class Gui implements
 
     private void trayDisplayMessage(TrayIcon.MessageType type, String msg) {
         trayIcon.displayMessage(type.name(), msg, type);
+    }
+
+    private Path userHomePath() {
+        return Path.of(System.getProperty("user.home"));
     }
 }

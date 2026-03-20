@@ -4,6 +4,7 @@ import kg.musabaev.doorphone.core.event.DeviceConnectedEvent;
 import kg.musabaev.doorphone.core.event.ServerStartedEvent;
 import kg.musabaev.doorphone.core.listener.DeviceConnectedListener;
 import kg.musabaev.doorphone.core.listener.ServerStartedListener;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -18,8 +19,10 @@ import static java.util.Objects.requireNonNull;
 /**
  * Сервер для приёма подключений от IoT устройства.
  */
+@Slf4j
 public class DeviceServer implements Runnable {
 
+    private final int port;
     private final ServerSocketChannel serverChannel;
     private final ExecutorService sessionPool;
     private final ExecutorService commandExecutor;
@@ -36,6 +39,7 @@ public class DeviceServer implements Runnable {
      * @throws IOException если не удалось привязать сокет к порту
      */
     public DeviceServer(int port, ExecutorService sessionPool, ExecutorService commandExecutor) throws IOException {
+        this.port = port;
         this.serverChannel = ServerSocketChannel.open();
         this.serverChannel.bind(new InetSocketAddress(port));
         this.sessionPool = sessionPool;
@@ -63,6 +67,7 @@ public class DeviceServer implements Runnable {
 
     @Override
     public void run() {
+        log.info("Device server started on {} port", port);
         fireServerStartedListeners(new ServerStartedEvent());
         acceptLoop();
     }
