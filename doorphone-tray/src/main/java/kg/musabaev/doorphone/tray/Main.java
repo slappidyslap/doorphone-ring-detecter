@@ -14,9 +14,10 @@ public class Main {
 //        }
         var deviceSessionPool = Executors.newSingleThreadExecutor();
         var commandExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        var server = new DeviceServer(8080, deviceSessionPool, commandExecutor);
+        var server = new DeviceServer(9156, deviceSessionPool, commandExecutor);
         server.start();
 
-        new Gui(server);
+        var gui = new Gui(server);
+        gui.start();
     }
 }

@@ -128,4 +128,8 @@ public class DeviceServer implements Runnable {
         serverThread.interrupt(); // чек
         sessionPool.shutdown();
     }
+
+    public boolean isRunning() {
+        return isRunning;
+    }
 }

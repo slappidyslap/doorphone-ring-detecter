@@ -2,6 +2,7 @@ package kg.musabaev.doorphone.tray;
 
 import kg.musabaev.doorphone.core.DeviceServer;
 import kg.musabaev.doorphone.core.DeviceSession;
+import kg.musabaev.doorphone.core.command.PingCommand;
 import kg.musabaev.doorphone.core.event.DeviceConnectedEvent;
 import kg.musabaev.doorphone.core.event.DeviceDisconnectedEvent;
 import kg.musabaev.doorphone.core.event.DoorphoneRingDetectedEvent;
@@ -11,11 +12,12 @@ import kg.musabaev.doorphone.core.listener.DeviceDisconnectedListener;
 import kg.musabaev.doorphone.core.listener.DoorphoneRingDetectedListener;
 import kg.musabaev.doorphone.core.listener.ServerStartedListener;
 
+import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.io.IOException;
 
-import static java.awt.TrayIcon.MessageType.INFO;
-import static java.awt.TrayIcon.MessageType.WARNING;
+import static java.awt.TrayIcon.MessageType.*;
 
 public class Gui implements
         ServerStartedListener,
@@ -23,33 +25,36 @@ public class Gui implements
         DoorphoneRingDetectedListener,
         DeviceDisconnectedListener {
 
-    private final DeviceServer server;
+    private final DeviceServer deviceServer;
+    private DeviceSession deviceSession;
 
     private SystemTray tray;
 
+    private TrayIcon trayIcon;
     private Image disabledIconImage;
     private Image pendingIconImage;
     private Image runningIconImage;
-    private TrayIcon trayIcon;
 
     private PopupMenu trayPopupMenu;
     private MenuItem pingMenuItem;
     private MenuItem exitMenuItem;
 
-    private boolean isDetectorEnabled;
-
     public Gui(DeviceServer deviceServer) {
-        this.server = deviceServer;
-
+        this.deviceServer = deviceServer;
+        this.deviceSession = null;
         initSystemTray();
-        initImages();
-
+        initTrayImages();
         setDefaultDisabledIcon();
-        isDetectorEnabled = true;
+        initTrayPopupMenu();
+        initListeners();
+    }
 
-        setPopupMenu();
-
-        addListeners();
+    public void start() {
+        try {
+            tray.add(trayIcon);
+        } catch (AWTException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void initSystemTray() {
@@ -58,7 +63,7 @@ public class Gui implements
         tray = SystemTray.getSystemTray();
     }
 
-    private void initImages() {
+    private void initTrayImages() {
         var toolkit = Toolkit.getDefaultToolkit();
         disabledIconImage = toolkit.createImage(
                 ClassLoader.getSystemResource("tray-icon-disabled.png")
@@ -73,14 +78,9 @@ public class Gui implements
 
     private void setDefaultDisabledIcon() {
         trayIcon = new TrayIcon(disabledIconImage);
-        try {
-            tray.add(trayIcon);
-        } catch (AWTException e) {
-            throw new RuntimeException(e);
-        }
     }
 
-    private void setPopupMenu() {
+    private void initTrayPopupMenu() {
         trayPopupMenu = new PopupMenu();
         pingMenuItem = new MenuItem("Ping Device");
         exitMenuItem = new MenuItem("Exit", new MenuShortcut(KeyEvent.VK_Q, false));
@@ -92,38 +92,36 @@ public class Gui implements
         trayIcon.setPopupMenu(trayPopupMenu);
     }
 
-    private void addListeners() {
-        server.addServerStartedListener(this);
-        server.addDeviceConnectedListener(event -> {
-            DeviceSession session = event.getSession();
-            session.addDoorphoneRingDetectedListener(this);
-            session.addDeviceDisconnectedListener(this);
+    private void initListeners() {
+        deviceServer.addServerStartedListener(this);
+        deviceServer.addDeviceConnectedListener(event -> {
+            deviceSession = event.getSession();
+            deviceSession.addDoorphoneRingDetectedListener(this);
+            deviceSession.addDeviceDisconnectedListener(this);
         });
 
-        // Отправка Ping через ExecutorService
-//        pingMenuItem.addActionListener(e -> {
-//            commandExecutor.execute(() -> {
-//                try {
-////                    server.sendCommand(new PingCommand());
-//                    trayIcon.displayMessage("Ping", "Команда отправлена!", TrayIcon.MessageType.INFO);
-//                } catch (IllegalStateException | IOException ex) {
-//                    trayIcon.displayMessage("Ошибка", ex.getMessage(), TrayIcon.MessageType.ERROR);
-//                }
-//            });
-//        });
-//
-//        // Выход из приложения
-//        exitMenuItem.addActionListener(e -> {
-//            commandExecutor.shutdownNow();
-//            System.exit(0);
-//        });
-//
-//        // Слушатель звонка домофона
-////        deviceEventServer.addDoorphoneRingDetectedListener(event -> {
-//            if (isDetectorEnabled) {
-//                trayIcon.displayMessage("Doorphone", "Звонок!", TrayIcon.MessageType.INFO);
-//            }
-//        });
+        pingMenuItem.addActionListener(e -> deviceSession
+                .sendCommandAsync(new PingCommand())
+                .thenAccept(resp -> {
+                    if (resp.isOk()) {
+                        SwingUtilities.invokeLater(() ->
+                                trayDisplayMessage(INFO, resp.getData())
+                        );
+                    } else {
+                        SwingUtilities.invokeLater(() ->
+                                trayDisplayMessage(ERROR, "No response")
+                        );
+                    }
+                })
+        );
+
+        exitMenuItem.addActionListener(e -> {
+            try {
+                deviceServer.stop();
+            } catch (IOException ignored) {
+            }
+            System.exit(0);
+        });
     }
 
     @Override
@@ -133,21 +131,22 @@ public class Gui implements
 
     @Override
     public void onConnected(DeviceConnectedEvent event) {
-        trayIcon.displayMessage(
-                "INFO",
-                "ESP32-S3 подключился. Его локальный IP адрес: %s".formatted(event.getRemoteAddress()),
-                INFO);
+        trayDisplayMessage(INFO, "ESP32-S3 подключился. Его локальный IP адрес: %s".formatted(event.getRemoteAddress()));
         trayIcon.setImage(runningIconImage);
     }
 
     @Override
     public void onDetected(DoorphoneRingDetectedEvent event) {
-        trayIcon.displayMessage("WARNING", "Дядя тебе звонят!", WARNING);
+        trayDisplayMessage(WARNING, "Дядя тебе звонят!");
     }
 
     @Override
     public void onDisconnected(DeviceDisconnectedEvent event) {
-        trayIcon.displayMessage("WARNING", "ESP32-S3 дисконнектился", WARNING);
+        trayDisplayMessage(WARNING, "ESP32-S3 дисконнектился");
         trayIcon.setImage(pendingIconImage);
+    }
+
+    private void trayDisplayMessage(TrayIcon.MessageType type, String msg) {
+        trayIcon.displayMessage(type.name(), msg, type);
     }
 }
