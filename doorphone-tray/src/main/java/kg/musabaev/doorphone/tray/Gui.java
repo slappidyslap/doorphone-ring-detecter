@@ -134,7 +134,7 @@ public class Gui implements
                 Desktop.getDesktop().open(logFilePath.toFile());
                 log.info("Current log file opened");
             } catch (IOException ex) {
-                log.error("Ошибка при попытке открыть текущего лог файла", ex);
+                log.error("Error while attempting to open the current log file", ex);
                 trayDisplayMessage(ERROR, "Unable to open logs.");
             }
         });
