@@ -18,6 +18,8 @@ java {
 dependencies {
     implementation(project(":doorphone-core"))
 
+    implementation("org.jmdns:jmdns:3.6.3")
+
     implementation("ch.qos.logback:logback-classic:1.5.32")
 
     compileOnly("org.projectlombok:lombok:1.18.42")
