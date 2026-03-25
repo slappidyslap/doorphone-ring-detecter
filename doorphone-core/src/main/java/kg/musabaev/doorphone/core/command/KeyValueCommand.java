@@ -14,9 +14,4 @@ public non-sealed class KeyValueCommand extends Command {
         super(key);
         this.value = value;
     }
-
-    @Override
-    public String getPayload() {
-        return "C:" + super.getKey() + ":" + value;
-    }
 }

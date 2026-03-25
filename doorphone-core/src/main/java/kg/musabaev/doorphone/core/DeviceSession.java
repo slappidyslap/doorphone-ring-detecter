@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
  * Предоставляет высокоуровневое API для взаимодействия с устройством:
  * <ul>
  *   <li>
- *       Отправка команд {@link Command} с помощью метода: {@link #sendCommand(Command)}
+ *       Отправка команд {@link Command} с помощью метода: {@link #sendCommandAsync(Command)}
  *   </li>
  *   <li>
  *       Подписка на события устройства, например на звонок домофона (с помощью метода {@link #addDoorphoneRingDetectedListener(DoorphoneRingDetectedListener)})
@@ -64,21 +64,17 @@ public class DeviceSession implements Runnable {
 
     public CompletableFuture<CommandResponse> sendCommandAsync(Command cmd) {
         var future = new CompletableFuture<CommandResponse>();
-        pendingCommandResponses.put(correlationIdCounter.getAndIncrement(), future);
+        int correlationId = correlationIdCounter.getAndIncrement();
+        pendingCommandResponses.put(correlationId, future);
 
-        commandExecutor.submit(() -> sendCommand(cmd));
+        commandExecutor.submit(() -> sendCommandWithCorrelationId(cmd, correlationId));
 
         return future;
     }
 
-    /**
-     * Отправляет команду IoT устройству.
-     *
-     * @param cmd объект команды
-     */
-    private void sendCommand(Command cmd) {
-        String rawPayload = cmd.getPayload();
-        sendCommand(rawPayload);
+    private void sendCommandWithCorrelationId(Command cmd, int correlationId) {
+        String payload = "C:" + correlationId + ":" + cmd.getKey();
+        sendRawCommand(payload);
     }
 
     /**
@@ -86,8 +82,8 @@ public class DeviceSession implements Runnable {
      *
      * @param payload строка для отправки
      */
-    private void sendCommand(String payload) {
-        ByteBuffer buffer = ByteBuffer.wrap(payload.getBytes(StandardCharsets.UTF_8));
+    private void sendRawCommand(String payload) {
+        ByteBuffer buffer = ByteBuffer.wrap((payload + "\n").getBytes(StandardCharsets.UTF_8));
         while (buffer.hasRemaining()) {
             try {
                 deviceChannel.write(buffer);

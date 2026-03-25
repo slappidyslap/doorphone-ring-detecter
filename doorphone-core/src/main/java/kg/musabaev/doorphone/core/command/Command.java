@@ -9,8 +9,4 @@ import lombok.Data;
 public sealed class Command permits KeyValueCommand, PingCommand {
 
     private final String key;
-
-    public String getPayload() {
-        return "C:" + key;
-    }
 }
