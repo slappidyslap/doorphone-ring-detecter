@@ -1,9 +1,9 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 
-const char* WIFI_SSID = "WIFI_SSID";
-const char* WIFI_PASSWORD = "WIFI_PASSWORD";
-const char* DEVICE_SERVER_HOST = "DEVICE_SERVER_HOST"; // mdns
+const char* WIFI_SSID = "TP-Link_AA98";
+const char* WIFI_PASSWORD = "36900534";
+const char* DEVICE_SERVER_HOST = "192.168.0.101"; // mdns
 const uint16_t DEVICE_SERVER_PORT = 9126;
 
 const int BUILDIN_LED = 48;
@@ -108,12 +108,29 @@ void handleServerCommands() {
 
   String cmd = network.readStringUntil('\n');
   cmd.trim();
+  
+  if (cmd.length() == 0) return;
+  
   Serial.print("Received: ");
   Serial.println(cmd);
 
-  if (cmd == "C:PING") {
-    network.println("R:PONG");
-    Serial.println("Sent: PONG");
+  // Формат: C:id:KEY
+  if (cmd.startsWith("C:")) {
+    int firstColon = cmd.indexOf(':');
+    int secondColon = cmd.indexOf(':', firstColon + 1);
+    
+    if (secondColon != -1) {
+      String id = cmd.substring(firstColon + 1, secondColon);
+      String key = cmd.substring(secondColon + 1);
+      
+      if (key == "PING") {
+        network.print("R:");
+        network.print(id);
+        network.println(":PONG");
+        Serial.print("Sent response for ID: ");
+        Serial.println(id);
+      }
+    }
   }
 }
 
@@ -125,8 +142,8 @@ void setup() {
   // Прерывание на цифровой выход KY-038
   attachInterrupt(digitalPinToInterrupt(SOUND_PIN_DIGITAL), onRingPulse, RISING);
 
-    connectToWifi();
-    connectToServer();
+  connectToWifi();
+  connectToServer();
 }
 
 void loop() {
